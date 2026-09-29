@@ -1,0 +1,44 @@
+Junba AI Transcriber v2.2 — 驗證報告
+
+本次重製針對 v2.1「檔案選取後像卡住、無百分比」問題。
+
+找到的 v2.1 原因：
+1. 當切割 = 0 時，整個長音檔只有 1 個 chunk。
+2. Worker 的整體 progress 只在整個 chunk 辨識完成後才 emit。
+3. LocalWhisperProvider 雖然有 progress_cb 參數，但 v2.1 Worker 呼叫時沒有傳入，所以 Whisper 轉錄期間完全沒有即時百分比。
+4. 第一次 large-v3 模型下載/載入也沒有獨立的 busy 顯示，因此很容易被誤認為當機。
+
+v2.2 改善：
+- Whisper 模型載入時顯示不定進度「處理中」。
+- Whisper 每產生一段 segment，依 segment.end / 音檔總長度回報目前階段百分比。
+- 整體進度會把目前 chunk 的百分比映射到整批檔案。
+- 顯示執行紀錄與 checkpoint 路徑。
+- 加入音檔後立即確認是否切割。
+- 支援多檔拖放與多選。
+- Google API Key 增加官方入口與連線測試。
+- Google 長音檔依 30/60 分鐘官方限制自動保護切割。
+- 停止後必須等背景 QThread 真正結束，才重新允許開始。
+
+本環境已實際驗證：
+- Python compileall：通過。
+- FFmpeg 建立測試 WAV：通過。
+- FFmpeg 合併兩個測試音檔：通過。
+- 音檔長度讀取 fallback：通過。
+- pytest：1 passed。
+
+Windows / EXE 的進一步驗證：
+GitHub Actions build-windows-v2.2.yml 會在 windows-latest 實際執行：
+- requirements 安裝與 pip check
+- compileall
+- imports smoke test
+- FFmpeg 功能測試
+- Single EXE 建置
+- Single EXE --self-test 實際啟動
+- Portable EXE 建置
+- Portable EXE --self-test 實際啟動
+只有 SELFTEST_OK 才上傳 Artifact。
+
+限制：
+- 目前執行環境不是 Windows，無法在這裡直接驗證你的實際 NVIDIA CUDA/cuDNN 驅動組合。
+- large-v3 模型不內嵌，第一次需下載或指定本機模型資料夾。
+- 離線多人講者 pyannote 尚未整合進標準 EXE；Google Gemini 音訊模式可使用多人講者。

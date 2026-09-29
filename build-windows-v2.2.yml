@@ -1,0 +1,120 @@
+name: Build Windows EXE v2.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.py'
+      - '**.spec'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows-v2.2.yml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'x64'
+          cache: 'pip'
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+          python -m pip check
+
+      - name: Source syntax and import smoke test
+        shell: pwsh
+        run: |
+          python -m compileall -q main.py app tests
+          python -c "import PySide6, faster_whisper, ctranslate2, av, imageio_ffmpeg, keyring, docx; import google.genai; print('imports OK')"
+
+      - name: Functional FFmpeg tests
+        shell: pwsh
+        run: pytest -q tests
+
+      - name: Build single EXE
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean JunbaAITranscriber_onefile.spec
+          if (!(Test-Path "dist/Junba_AI_Transcriber_v2.2.exe")) { throw "One-file EXE not found" }
+
+      - name: Self-test single EXE on Windows runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $p = Start-Process -FilePath "$pwd/dist/Junba_AI_Transcriber_v2.2.exe" -ArgumentList "--self-test", "$pwd/release/SELFTEST_SINGLE.txt" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Single EXE self-test exit code $($p.ExitCode)" }
+          if (!(Test-Path "release/SELFTEST_SINGLE.txt")) { throw "Single EXE self-test report missing" }
+          Get-Content "release/SELFTEST_SINGLE.txt"
+          if (-not (Select-String -Path "release/SELFTEST_SINGLE.txt" -Pattern "SELFTEST_OK" -Quiet)) { throw "Single EXE self-test failed" }
+
+      - name: Build portable version
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean JunbaAITranscriber_portable.spec
+          if (!(Test-Path "dist/Junba_AI_Transcriber_v2.2_Portable/Junba_AI_Transcriber_v2.2.exe")) { throw "Portable EXE not found" }
+
+      - name: Self-test portable EXE on Windows runner
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "$pwd/dist/Junba_AI_Transcriber_v2.2_Portable/Junba_AI_Transcriber_v2.2.exe" -ArgumentList "--self-test", "$pwd/release/SELFTEST_PORTABLE.txt" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Portable EXE self-test exit code $($p.ExitCode)" }
+          Get-Content "release/SELFTEST_PORTABLE.txt"
+          if (-not (Select-String -Path "release/SELFTEST_PORTABLE.txt" -Pattern "SELFTEST_OK" -Quiet)) { throw "Portable EXE self-test failed" }
+
+      - name: Create release files
+        shell: pwsh
+        run: |
+          Copy-Item "dist/Junba_AI_Transcriber_v2.2.exe" "release/Junba_AI_Transcriber_v2.2.exe"
+          Compress-Archive -Path "dist/Junba_AI_Transcriber_v2.2_Portable/*" -DestinationPath "release/Junba_AI_Transcriber_v2.2_Portable_Windows_x64.zip" -Force
+          $hash = (Get-FileHash "release/Junba_AI_Transcriber_v2.2.exe" -Algorithm SHA256).Hash
+          @"
+          Junba AI Transcriber v2.2
+          Build OS: Windows x64 / GitHub Actions
+          Python: $(python --version)
+          Single EXE SHA256: $hash
+
+          CI 驗證：
+          - Python compileall
+          - 套件 import smoke test
+          - FFmpeg 音檔建立/合併測試
+          - Single EXE 在 Windows runner 實際執行 --self-test
+          - Portable EXE 在 Windows runner 實際執行 --self-test
+
+          注意：large-v3 模型不內嵌在 EXE；第一次使用模型名稱時需下載，或在 GUI 指定已下載的本機模型資料夾。
+          "@ | Set-Content -Path "release/BUILD_INFO.txt" -Encoding UTF8
+
+      - name: Upload single EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Junba-AI-Transcriber-v2.2-Single-EXE-Windows-x64
+          path: |
+            release/Junba_AI_Transcriber_v2.2.exe
+            release/BUILD_INFO.txt
+            release/SELFTEST_SINGLE.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Junba-AI-Transcriber-v2.2-Portable-Windows-x64
+          path: |
+            release/Junba_AI_Transcriber_v2.2_Portable_Windows_x64.zip
+            release/BUILD_INFO.txt
+            release/SELFTEST_PORTABLE.txt
+          if-no-files-found: error
+          retention-days: 30

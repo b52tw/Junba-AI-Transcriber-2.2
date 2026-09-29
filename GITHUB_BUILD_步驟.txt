@@ -1,0 +1,24 @@
+Junba AI Transcriber v2.2 — GitHub Actions Windows EXE 編譯步驟
+
+1. 在 GitHub 建立 Repository，例如：Junba-AI-Transcriber。
+2. 把本資料夾「裡面的全部內容」上傳到 Repository 根目錄。
+   注意：.github/workflows/build-windows-v2.2.yml 必須保持完整路徑。
+3. GitHub → Actions → 選「Build Windows EXE v2.2」→ Run workflow。
+4. Workflow 全部綠色後，到該次執行頁面最下方 Artifacts：
+   A. Junba-AI-Transcriber-v2.2-Single-EXE-Windows-x64
+      內含：Junba_AI_Transcriber_v2.2.exe
+   B. Junba-AI-Transcriber-v2.2-Portable-Windows-x64
+      內含：Junba_AI_Transcriber_v2.2_Portable_Windows_x64.zip
+5. 這版 Workflow 不是只「編譯成功」就算完成，會再實際執行兩個 EXE 的 --self-test。
+   Artifact 會附 SELFTEST_SINGLE.txt / SELFTEST_PORTABLE.txt；看到 SELFTEST_OK 才代表 Windows runner 實際啟動與必要元件檢查通過。
+
+v2.2 重點修正：
+- 設定頁加入「前往取得 API Key」「測試 API Key」。
+- 音檔可從 Windows 檔案總管拖曳多個檔案進清單，也可按加入音檔多選。
+- 加入音檔後立即詢問是否切割：不切、10、15、30、60、自訂分鐘。
+- Whisper 模型載入改顯示「處理中」動畫，不再看起來像當機。
+- Whisper 轉錄依音訊時間持續回報目前階段 % 與整體 %。
+- 新增執行紀錄與 checkpoint 路徑顯示。
+- Google 模式依官方限制自動保護：多人講者/字詞時間戳時，長音檔自動以最多 30 分鐘切割。
+- 離線 Whisper 標準版不再顯示「多人講者已可用」的誤導選項；離線多人講者需另整合 pyannote 才算完成。
+- 停止後不會立即允許第二個工作同時啟動；會等背景執行緒真正結束。
